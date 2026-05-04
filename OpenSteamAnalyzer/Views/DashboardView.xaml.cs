@@ -20,6 +20,7 @@ public partial class DashboardView : UserControl
     private static readonly HttpClient BackgroundHttpClient = new();
     private MediaPlayer? _backgroundMediaPlayer;
     private MediaClock? _backgroundMediaClock;
+    private int _backgroundRequestVersion;
 
     public DashboardView()
     {
@@ -68,6 +69,8 @@ public partial class DashboardView : UserControl
         {
             viewModel.PropertyChanged -= DashboardViewModel_OnPropertyChanged;
         }
+
+        StopProfileBackgroundVideo();
     }
 
     private void DashboardViewModel_OnPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -168,6 +171,8 @@ public partial class DashboardView : UserControl
 
     private async void UpdateProfileBackground(SteamProfile? profile)
     {
+        var requestVersion = ++_backgroundRequestVersion;
+
         if (profile is null || !profile.HasProfileBackground)
         {
             ProfileBackgroundImage.Visibility = Visibility.Collapsed;
@@ -178,6 +183,8 @@ public partial class DashboardView : UserControl
 
         try
         {
+            StopProfileBackgroundVideo();
+
             if (!string.IsNullOrWhiteSpace(profile.ProfileBackgroundUrl))
             {
                 ProfileBackgroundImage.Source = new BitmapImage(new Uri(profile.ProfileBackgroundUrl, UriKind.Absolute));
@@ -192,6 +199,11 @@ public partial class DashboardView : UserControl
             if (!string.IsNullOrWhiteSpace(profile.ProfileBackgroundVideoUrl))
             {
                 var cachedVideoPath = await CacheBackgroundVideoAsync(profile.ProfileBackgroundVideoUrl);
+                if (requestVersion != _backgroundRequestVersion)
+                {
+                    return;
+                }
+
                 StartProfileBackgroundVideo(cachedVideoPath);
                 return;
             }
@@ -215,6 +227,10 @@ public partial class DashboardView : UserControl
     private void StartProfileBackgroundVideo(string videoPath)
     {
         StopProfileBackgroundVideo();
+        if (!File.Exists(videoPath))
+        {
+            return;
+        }
 
         var timeline = new MediaTimeline(new Uri(videoPath, UriKind.Absolute))
         {
@@ -237,6 +253,7 @@ public partial class DashboardView : UserControl
             Stretch = Stretch.UniformToFill
         };
         ProfileBackgroundVideo.Visibility = Visibility.Visible;
+        ProfileBackgroundImage.Visibility = Visibility.Collapsed;
         _backgroundMediaClock.Controller?.Begin();
     }
 
@@ -249,6 +266,7 @@ public partial class DashboardView : UserControl
         ProfileBackgroundVideo.Fill = null;
         ProfileBackgroundVideo.Visibility = Visibility.Collapsed;
     }
+
 
     private static async Task<string> CacheBackgroundVideoAsync(string videoUrl)
     {
