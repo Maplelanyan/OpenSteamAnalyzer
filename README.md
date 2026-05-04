@@ -68,7 +68,6 @@ OpenSteamAnalyzer 是一个基于 **WPF + .NET 8** 的 Steam 账号数据分析�
 
 ```md
 ![Dashboard](docs/images/dashboard0.png)
-![Dashboard](docs/images/dashboard1.png)
 ```
 
 ---
