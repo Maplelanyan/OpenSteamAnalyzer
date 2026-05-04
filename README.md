@@ -567,13 +567,9 @@ git push origin feature/your-feature
 
 ## License
 
-当前仓库暂未包含明确的 License 文件。
+本项目基于 MIT License 开源。
 
-如果你希望该项目作为开源项目长期维护，建议补充一个 License，例如：
-
-- MIT License
-- Apache License 2.0
-- GPL-3.0 License
+详情请查看 [LICENSE](LICENSE) 文件。
 
 ---
 
