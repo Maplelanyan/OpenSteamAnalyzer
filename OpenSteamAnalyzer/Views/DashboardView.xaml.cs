@@ -8,7 +8,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using OpenSteamAnalyzer.Models;
 using OpenSteamAnalyzer.ViewModels;
@@ -19,7 +18,6 @@ public partial class DashboardView : UserControl
 {
     private static readonly HttpClient BackgroundHttpClient = new();
     private MediaPlayer? _backgroundMediaPlayer;
-    private MediaClock? _backgroundMediaClock;
     private int _backgroundRequestVersion;
 
     public DashboardView()
@@ -232,16 +230,9 @@ public partial class DashboardView : UserControl
             return;
         }
 
-        var timeline = new MediaTimeline(new Uri(videoPath, UriKind.Absolute))
-        {
-            RepeatBehavior = RepeatBehavior.Forever
-        };
-        _backgroundMediaClock = timeline.CreateClock();
-        _backgroundMediaPlayer = new MediaPlayer
-        {
-            Clock = _backgroundMediaClock,
-            Volume = 0
-        };
+        _backgroundMediaPlayer = new MediaPlayer { Volume = 0 };
+        _backgroundMediaPlayer.MediaEnded += BackgroundMediaPlayer_OnMediaEnded;
+        _backgroundMediaPlayer.Open(new Uri(videoPath, UriKind.Absolute));
 
         var drawing = new VideoDrawing
         {
@@ -254,17 +245,32 @@ public partial class DashboardView : UserControl
         };
         ProfileBackgroundVideo.Visibility = Visibility.Visible;
         ProfileBackgroundImage.Visibility = Visibility.Collapsed;
-        _backgroundMediaClock.Controller?.Begin();
+        _backgroundMediaPlayer.Play();
     }
 
     private void StopProfileBackgroundVideo()
     {
-        _backgroundMediaClock?.Controller?.Stop();
-        _backgroundMediaPlayer?.Close();
-        _backgroundMediaClock = null;
+        if (_backgroundMediaPlayer is not null)
+        {
+            _backgroundMediaPlayer.MediaEnded -= BackgroundMediaPlayer_OnMediaEnded;
+            _backgroundMediaPlayer.Stop();
+            _backgroundMediaPlayer.Close();
+        }
+
         _backgroundMediaPlayer = null;
         ProfileBackgroundVideo.Fill = null;
         ProfileBackgroundVideo.Visibility = Visibility.Collapsed;
+    }
+
+    private void BackgroundMediaPlayer_OnMediaEnded(object? sender, EventArgs e)
+    {
+        if (_backgroundMediaPlayer is null)
+        {
+            return;
+        }
+
+        _backgroundMediaPlayer.Position = TimeSpan.Zero;
+        _backgroundMediaPlayer.Play();
     }
 
 
