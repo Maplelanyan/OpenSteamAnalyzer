@@ -1,0 +1,277 @@
+<UserControl x:Class="OpenSteamAnalyzer.Views.DashboardView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:lvc="clr-namespace:LiveChartsCore.SkiaSharpView.WPF;assembly=LiveChartsCore.SkiaSharpView.WPF"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+             mc:Ignorable="d">
+    <Grid>
+        <Rectangle x:Name="ProfileBackgroundVideo"
+                   IsHitTestVisible="False"
+                   Visibility="Collapsed" />
+        <Image x:Name="ProfileBackgroundImage"
+               IsHitTestVisible="False"
+               Opacity="1"
+               Stretch="UniformToFill"
+               Visibility="Collapsed" />
+        <Border Background="#4DEEF2F7" />
+        <ScrollViewer x:Name="PageScrollViewer"
+                      HorizontalScrollBarVisibility="Disabled"
+                      VerticalScrollBarVisibility="Auto">
+            <Grid Margin="28">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Margin="0,0,0,22" Style="{StaticResource CardStyle}">
+                <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <TextBlock Text="Open Steam Analyzer"
+                               FontSize="32"
+                               FontWeight="Bold" />
+                    <TextBlock Margin="0,8,0,0"
+                               Foreground="{StaticResource MutedInkBrush}"
+                               Text="Steam 游戏库统计、本地缓存、排行与游玩分布" />
+                </StackPanel>
+                <TextBlock Grid.Column="1"
+                           VerticalAlignment="Center"
+                           Foreground="{StaticResource MutedInkBrush}"
+                           Text="{Binding StatusText}" />
+                </Grid>
+        </Border>
+
+        <Border Grid.Row="1" Margin="0,0,0,22" Style="{StaticResource CardStyle}">
+                <WrapPanel Orientation="Horizontal">
+                    <StackPanel Width="520"
+                                MinWidth="360"
+                                Margin="0,0,16,12">
+                        <TextBlock Margin="2,0,0,8"
+                                   Foreground="{StaticResource MutedInkBrush}"
+                                   Text="SteamID64 或 Steam 主页链接" />
+                        <TextBox Text="{Binding AccountInput, UpdateSourceTrigger=PropertyChanged}" />
+                    </StackPanel>
+
+                    <StackPanel Width="260" Margin="0,0,16,12">
+                        <TextBlock Margin="2,0,0,8"
+                                   Foreground="{StaticResource MutedInkBrush}"
+                                   Text="Steam API Key" />
+                        <PasswordBox x:Name="ApiKeyPasswordBox" />
+                    </StackPanel>
+
+                    <Button Margin="0,26,10,12"
+                            Click="SaveApiKeyButton_OnClick"
+                            Content="保存 Key" />
+                    <Button Margin="0,26,10,12"
+                            Command="{Binding AnalyzeCommand}"
+                            Content="分析" />
+                    <Button Margin="0,26,0,12"
+                            Command="{Binding RefreshCommand}"
+                            Content="强制刷新" />
+                </WrapPanel>
+        </Border>
+
+        <WrapPanel Grid.Row="2" Margin="0,0,0,6">
+                <Border Width="300"
+                        Margin="0,0,16,16"
+                        Style="{StaticResource CardStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="76" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid Width="72"
+                              Height="72"
+                              VerticalAlignment="Center">
+                            <Border Width="58"
+                                    Height="58"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Background="#E8EDF5"
+                                    CornerRadius="8">
+                                <Image Source="{Binding Profile.DisplayAvatarUrl}" Stretch="UniformToFill" />
+                            </Border>
+                            <Image Width="72"
+                                   Height="72"
+                                   Source="{Binding Profile.AvatarFrameUrl}"
+                                   Stretch="Uniform" />
+                            <wv2:WebView2 x:Name="AnimatedAvatarWebView"
+                                          Width="72"
+                                          Height="72"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          IsHitTestVisible="False"
+                                          Visibility="Collapsed" />
+                        </Grid>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock FontSize="20"
+                                       FontWeight="SemiBold"
+                                       Text="{Binding Profile.DisplayName, TargetNullValue=未加载}" />
+                            <TextBlock Margin="0,6,0,0"
+                                       Foreground="{StaticResource MutedInkBrush}"
+                                       Text="{Binding Profile.StateText}" />
+                            <TextBlock Margin="0,4,0,0"
+                                       Foreground="{StaticResource MutedInkBrush}"
+                                       Text="{Binding Profile.LevelText}" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <Border Width="178"
+                        Margin="0,0,16,16"
+                        Style="{StaticResource MetricCardStyle}">
+                    <StackPanel>
+                        <TextBlock Foreground="{StaticResource MutedInkBrush}" Text="游戏总数" />
+                        <TextBlock Margin="0,12,0,0"
+                                   FontSize="28"
+                                   FontWeight="Bold"
+                                   Text="{Binding TotalGames}" />
+                    </StackPanel>
+                </Border>
+
+                <Border Width="178"
+                        Margin="0,0,16,16"
+                        Style="{StaticResource MetricCardStyle}">
+                    <StackPanel>
+                        <TextBlock Foreground="{StaticResource MutedInkBrush}" Text="总游玩时长" />
+                        <TextBlock Margin="0,12,0,0"
+                                   FontSize="28"
+                                   FontWeight="Bold"
+                                   Text="{Binding TotalHours}" />
+                    </StackPanel>
+                </Border>
+
+                <Border Width="178"
+                        Margin="0,0,16,16"
+                        Style="{StaticResource MetricCardStyle}">
+                    <StackPanel>
+                        <TextBlock Foreground="{StaticResource MutedInkBrush}" Text="平均时长" />
+                        <TextBlock Margin="0,12,0,0"
+                                   FontSize="28"
+                                   FontWeight="Bold"
+                                   Text="{Binding AverageHours}" />
+                    </StackPanel>
+                </Border>
+
+                <Border Width="178"
+                        Margin="0,0,16,16"
+                        Style="{StaticResource MetricCardStyle}">
+                    <StackPanel>
+                        <TextBlock Foreground="{StaticResource MutedInkBrush}" Text="未玩游戏" />
+                        <TextBlock Margin="0,12,0,0"
+                                   FontSize="28"
+                                   FontWeight="Bold"
+                                   Text="{Binding UnplayedGames}" />
+                    </StackPanel>
+                </Border>
+
+                <Border Width="178"
+                        Margin="0,0,16,16"
+                        Style="{StaticResource MetricCardStyle}">
+                    <StackPanel>
+                        <TextBlock Foreground="{StaticResource MutedInkBrush}" Text="近两周" />
+                        <TextBlock Margin="0,12,0,0"
+                                   FontSize="28"
+                                   FontWeight="Bold"
+                                   Text="{Binding RecentTwoWeeksHours}" />
+                    </StackPanel>
+                </Border>
+        </WrapPanel>
+
+        <Grid Grid.Row="3">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <WrapPanel Grid.Row="0" Margin="0,0,0,6">
+                    <Border Width="680"
+                            Height="284"
+                            Margin="0,0,16,16"
+                            Style="{StaticResource CardStyle}">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Top"
+                                       FontSize="18"
+                                       FontWeight="SemiBold"
+                                       Text="Top 游戏游玩时长" />
+                            <lvc:CartesianChart Margin="0,18,0,0"
+                                                Series="{Binding TopGamesSeries}"
+                                                XAxes="{Binding TopGamesXAxes}"
+                                                YAxes="{Binding TopGamesYAxes}" />
+                        </DockPanel>
+                    </Border>
+
+                    <Border Width="440"
+                            Height="284"
+                            Margin="0,0,16,16"
+                            Style="{StaticResource CardStyle}">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Top"
+                                       FontSize="18"
+                                       FontWeight="SemiBold"
+                                       Text="游玩时长分布" />
+                            <lvc:PieChart Margin="0,18,0,0"
+                                          Series="{Binding DistributionSeries}" />
+                        </DockPanel>
+                    </Border>
+            </WrapPanel>
+
+            <Border Grid.Row="1"
+                    Style="{StaticResource CardStyle}">
+                    <DockPanel>
+                        <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,14">
+                            <TextBox Width="520"
+                                     Margin="0,0,12,12"
+                                     Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" />
+                            <ComboBox Width="180"
+                                      Margin="0,0,12,12"
+                                      ItemsSource="{Binding FilterOptions}"
+                                      SelectedItem="{Binding SelectedFilterOption}" />
+                            <ComboBox Width="180"
+                                      Margin="0,0,0,12"
+                                      ItemsSource="{Binding SortOptions}"
+                                      SelectedItem="{Binding SelectedSortOption}" />
+                        </WrapPanel>
+
+                        <DataGrid ItemsSource="{Binding GamesView}"
+                                  PreviewMouseWheel="GamesDataGrid_OnPreviewMouseWheel"
+                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                  ScrollViewer.VerticalScrollBarVisibility="Disabled">
+                            <DataGrid.Columns>
+                                <DataGridTemplateColumn Header="" Width="58">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <Border Width="34"
+                                                    Height="34"
+                                                    HorizontalAlignment="Center"
+                                                    VerticalAlignment="Center"
+                                                    Background="#EEF2F7"
+                                                    CornerRadius="8">
+                                                <Image Width="32"
+                                                       Height="32"
+                                                       Source="{Binding IconUrl}"
+                                                       Stretch="UniformToFill" />
+                                            </Border>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                                <DataGridTextColumn Binding="{Binding Name}" Header="游戏" Width="*" />
+                                <DataGridTextColumn Binding="{Binding PlaytimeHours}" Header="小时" Width="110" />
+                                <DataGridTextColumn Binding="{Binding RecentPlaytimeHours}" Header="近两周" Width="110" />
+                                <DataGridTextColumn Binding="{Binding LastPlayedText}" Header="最后游玩" Width="160" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </DockPanel>
+            </Border>
+        </Grid>
+            </Grid>
+        </ScrollViewer>
+    </Grid>
+</UserControl>
