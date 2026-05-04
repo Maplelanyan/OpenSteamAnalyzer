@@ -515,7 +515,6 @@ dotnet publish .\OpenSteamAnalyzer\OpenSteamAnalyzer.csproj -c Release -r win-x6
 
 可以考虑继续完善以下功能：
 
-- 添加项目截图
 - 添加 Release 自动构建
 - 添加 GitHub Actions
 - 添加单元测试项目
