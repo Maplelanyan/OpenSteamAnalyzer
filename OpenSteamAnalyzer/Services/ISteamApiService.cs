@@ -9,4 +9,6 @@ public interface ISteamApiService
     Task<IReadOnlyList<SteamGame>> GetOwnedGamesAsync(string steamId64, CancellationToken cancellationToken);
 
     Task<IReadOnlyDictionary<int, int>> GetRecentPlaytimeByAppIdAsync(string steamId64, CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<SteamFriend>> GetFriendsAsync(string steamId64, CancellationToken cancellationToken);
 }

@@ -5,8 +5,12 @@
              xmlns:lvc="clr-namespace:LiveChartsCore.SkiaSharpView.WPF;assembly=LiveChartsCore.SkiaSharpView.WPF"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
-             mc:Ignorable="d">
-    <Grid>
+             mc:Ignorable="d"
+             ClipToBounds="True">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+    </UserControl.Resources>
+    <Grid ClipToBounds="True">
         <Rectangle x:Name="ProfileBackgroundVideo"
                    IsHitTestVisible="False"
                    Visibility="Collapsed" />
@@ -17,9 +21,11 @@
                Visibility="Collapsed" />
         <Border Background="#4DEEF2F7" />
         <ScrollViewer x:Name="PageScrollViewer"
+                      ClipToBounds="True"
                       HorizontalScrollBarVisibility="Disabled"
+                      ScrollChanged="PageScrollViewer_OnScrollChanged"
                       VerticalScrollBarVisibility="Auto">
-            <Grid Margin="28">
+            <Grid Margin="28" ClipToBounds="True">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -62,13 +68,12 @@
                     <StackPanel Width="260" Margin="0,0,16,12">
                         <TextBlock Margin="2,0,0,8"
                                    Foreground="{StaticResource MutedInkBrush}"
-                                   Text="Steam API Key" />
-                        <PasswordBox x:Name="ApiKeyPasswordBox" />
+                                   Text="历史账号" />
+                        <ComboBox ItemsSource="{Binding AccountHistory}"
+                                  DisplayMemberPath="DisplayText"
+                                  SelectedItem="{Binding SelectedHistoryAccount, Mode=TwoWay}" />
                     </StackPanel>
 
-                    <Button Margin="0,26,10,12"
-                            Click="SaveApiKeyButton_OnClick"
-                            Content="保存 Key" />
                     <Button Margin="0,26,10,12"
                             Command="{Binding AnalyzeCommand}"
                             Content="分析" />
@@ -80,47 +85,98 @@
 
         <WrapPanel Grid.Row="2" Margin="0,0,0,6">
                 <Border Width="300"
+                        x:Name="ProfileCard"
                         Margin="0,0,16,16"
-                        Style="{StaticResource CardStyle}">
+                        Height="118"
+                        Padding="0"
+                        Background="{StaticResource SurfaceBrush}"
+                        BorderBrush="#FFFFFF"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        ClipToBounds="True">
+                    <Border.Effect>
+                        <DropShadowEffect BlurRadius="20"
+                                          Direction="315"
+                                          Opacity="0.14"
+                                          ShadowDepth="8"
+                                          Color="#8EA0B8" />
+                    </Border.Effect>
                     <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="76" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <Grid Width="72"
-                              Height="72"
-                              VerticalAlignment="Center">
-                            <Border Width="58"
-                                    Height="58"
-                                    HorizontalAlignment="Center"
-                                    VerticalAlignment="Center"
-                                    Background="#E8EDF5"
-                                    CornerRadius="8">
-                                <Image Source="{Binding Profile.DisplayAvatarUrl}" Stretch="UniformToFill" />
-                            </Border>
-                            <Image Width="72"
-                                   Height="72"
-                                   Source="{Binding Profile.AvatarFrameUrl}"
-                                   Stretch="Uniform" />
-                            <wv2:WebView2 x:Name="AnimatedAvatarWebView"
-                                          Width="72"
-                                          Height="72"
-                                          HorizontalAlignment="Center"
-                                          VerticalAlignment="Center"
-                                          IsHitTestVisible="False"
+                        <Border x:Name="ProfileCardClipMask"
+                                Background="#FFFFFF"
+                                CornerRadius="8" />
+                        <Grid IsHitTestVisible="False">
+                            <Grid.OpacityMask>
+                                <VisualBrush Visual="{Binding ElementName=ProfileCardClipMask}" />
+                            </Grid.OpacityMask>
+                            <Image Source="{Binding Profile.MiniProfileBackgroundUrl}"
+                                   Width="{Binding ActualWidth, ElementName=ProfileCard}"
+                                   Height="{Binding ActualHeight, ElementName=ProfileCard}"
+                                   Stretch="UniformToFill"
+                                   Visibility="{Binding Profile.HasMiniProfileBackground, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                            <MediaElement x:Name="MiniProfilePreviewMedia"
+                                          Width="{Binding ActualWidth, ElementName=ProfileCard}"
+                                          Height="{Binding ActualHeight, ElementName=ProfileCard}"
+                                          LoadedBehavior="Manual"
+                                          MediaEnded="MiniProfilePreviewMedia_OnMediaEnded"
+                                          Stretch="UniformToFill"
+                                          UnloadedBehavior="Manual"
                                           Visibility="Collapsed" />
+                            <Border Background="#B3F8FAFC"
+                                    Visibility="{Binding Profile.HasMiniProfileBackground, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                            <Grid Margin="20">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="76" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Grid Width="72"
+                                      Height="72"
+                                      VerticalAlignment="Center">
+                                    <Grid Width="58"
+                                          Height="58"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center">
+                                        <Border x:Name="ProfileAvatarMask"
+                                                Background="#E8EDF5"
+                                                CornerRadius="8" />
+                                        <Image Source="{Binding Profile.DisplayAvatarUrl}"
+                                               Stretch="UniformToFill">
+                                            <Image.OpacityMask>
+                                                <VisualBrush Visual="{Binding ElementName=ProfileAvatarMask}" />
+                                            </Image.OpacityMask>
+                                        </Image>
+                                    </Grid>
+                                    <Image Width="72"
+                                           Height="72"
+                                           Source="{Binding Profile.AvatarFrameUrl}"
+                                           Stretch="Uniform" />
+                                    <wv2:WebView2 x:Name="AnimatedAvatarWebView"
+                                                  Width="72"
+                                                  Height="72"
+                                                  HorizontalAlignment="Center"
+                                                  VerticalAlignment="Center"
+                                                  IsHitTestVisible="False"
+                                                  Visibility="Collapsed" />
+                                </Grid>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock FontSize="20"
+                                               FontWeight="SemiBold"
+                                               Text="{Binding Profile.DisplayName, TargetNullValue=未加载}" />
+                                    <TextBlock Margin="0,6,0,0"
+                                               Foreground="{StaticResource MutedInkBrush}"
+                                               Text="{Binding Profile.StateText}" />
+                                    <Border Margin="0,8,0,0"
+                                            Padding="10,4"
+                                            HorizontalAlignment="Left"
+                                            Background="{Binding Profile.LevelBadgeBackground, TargetNullValue=#EEF2F7}"
+                                            CornerRadius="8">
+                                        <TextBlock FontWeight="SemiBold"
+                                                   Foreground="{Binding Profile.LevelColor, TargetNullValue=#667085}"
+                                                   Text="{Binding Profile.LevelText, TargetNullValue=等级未知}" />
+                                    </Border>
+                                </StackPanel>
+                            </Grid>
                         </Grid>
-                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                            <TextBlock FontSize="20"
-                                       FontWeight="SemiBold"
-                                       Text="{Binding Profile.DisplayName, TargetNullValue=未加载}" />
-                            <TextBlock Margin="0,6,0,0"
-                                       Foreground="{StaticResource MutedInkBrush}"
-                                       Text="{Binding Profile.StateText}" />
-                            <TextBlock Margin="0,4,0,0"
-                                       Foreground="{StaticResource MutedInkBrush}"
-                                       Text="{Binding Profile.LevelText}" />
-                        </StackPanel>
                     </Grid>
                 </Border>
 
@@ -183,10 +239,102 @@
                                    Text="{Binding RecentTwoWeeksHours}" />
                     </StackPanel>
                 </Border>
+
+                <Border Width="380"
+                        Height="278"
+                        Margin="0,0,16,16"
+                        Style="{StaticResource CardStyle}">
+                    <DockPanel>
+                        <Grid DockPanel.Dock="Top">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock FontSize="18"
+                                       FontWeight="SemiBold"
+                                       Text="好友列表" />
+                            <TextBlock Grid.Column="1"
+                                       VerticalAlignment="Center"
+                                       Foreground="{StaticResource MutedInkBrush}"
+                                       Text="{Binding FriendStatusText}" />
+                        </Grid>
+
+                        <ListBox Margin="0,14,0,0"
+                                 BorderThickness="0"
+                                 ItemsSource="{Binding Friends}"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                            <ListBox.ItemContainerStyle>
+                                <Style TargetType="{x:Type ListBoxItem}">
+                                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                    <Setter Property="Padding" Value="0" />
+                                    <Setter Property="BorderThickness" Value="0" />
+                                    <Setter Property="Background" Value="Transparent" />
+                                </Style>
+                            </ListBox.ItemContainerStyle>
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,0,0,10">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="44" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="68" />
+                                        </Grid.ColumnDefinitions>
+                                        <Grid Width="36"
+                                              Height="36"
+                                              HorizontalAlignment="Left"
+                                              VerticalAlignment="Center">
+                                            <Border x:Name="FriendAvatarMask"
+                                                    Background="#EEF2F7"
+                                                    CornerRadius="8" />
+                                            <Image Source="{Binding AvatarUrl}"
+                                                   Stretch="UniformToFill">
+                                                <Image.OpacityMask>
+                                                    <VisualBrush Visual="{Binding ElementName=FriendAvatarMask}" />
+                                                </Image.OpacityMask>
+                                            </Image>
+                                        </Grid>
+                                        <StackPanel Grid.Column="1"
+                                                    VerticalAlignment="Center">
+                                            <TextBlock FontWeight="SemiBold"
+                                                       Text="{Binding DisplayName}"
+                                                       TextTrimming="CharacterEllipsis" />
+                                            <StackPanel Margin="0,4,0,0"
+                                                        Orientation="Horizontal">
+                                                <Border Padding="7,2"
+                                                        Background="{Binding LevelBadgeBackground}"
+                                                        CornerRadius="7">
+                                                    <TextBlock FontSize="11"
+                                                               FontWeight="SemiBold"
+                                                               Foreground="{Binding LevelColor}"
+                                                               Text="{Binding LevelText}" />
+                                                </Border>
+                                                <TextBlock Margin="8,1,0,0"
+                                                           VerticalAlignment="Center"
+                                                           Foreground="{StaticResource MutedInkBrush}"
+                                                           Text="{Binding SummaryText, Mode=OneWay}"
+                                                           TextTrimming="CharacterEllipsis" />
+                                            </StackPanel>
+                                        </StackPanel>
+                                        <Button Grid.Column="2"
+                                                Width="58"
+                                                Height="32"
+                                                Margin="10,0,0,0"
+                                                HorizontalAlignment="Right"
+                                                Padding="0"
+                                                VerticalAlignment="Center"
+                                                Click="AnalyzeFriendButton_OnClick"
+                                                Content="分析" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </DockPanel>
+                </Border>
         </WrapPanel>
 
         <Grid Grid.Row="3">
             <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
@@ -223,7 +371,104 @@
                     </Border>
             </WrapPanel>
 
-            <Border Grid.Row="1"
+            <StackPanel Grid.Row="1" Margin="0,0,0,6">
+                    <Border MinWidth="720"
+                            Margin="0,0,16,16"
+                            Style="{StaticResource CardStyle}">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Top"
+                                       FontSize="18"
+                                       FontWeight="SemiBold"
+                                       Text="趋势摘要" />
+                            <ItemsControl Margin="0,16,0,0"
+                                          ItemsSource="{Binding TrendInsights}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Width="250"
+                                                MinHeight="112"
+                                                Margin="0,0,16,12"
+                                                Padding="14"
+                                                Background="#FFFFFF"
+                                                BorderBrush="{StaticResource LineBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="8">
+                                            <StackPanel>
+                                                <TextBlock Foreground="{StaticResource MutedInkBrush}"
+                                                           Text="{Binding Title}" />
+                                                <TextBlock Margin="0,8,0,0"
+                                                           FontSize="22"
+                                                           FontWeight="SemiBold"
+                                                           Text="{Binding Value}"
+                                                           TextTrimming="CharacterEllipsis" />
+                                                <TextBlock Margin="0,8,0,0"
+                                                           Foreground="{StaticResource MutedInkBrush}"
+                                                           Text="{Binding Description}"
+                                                           TextWrapping="Wrap" />
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </DockPanel>
+                    </Border>
+
+                <WrapPanel>
+                    <Border Width="540"
+                            Height="286"
+                            Margin="0,0,16,16"
+                            Style="{StaticResource CardStyle}">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Top"
+                                       FontSize="18"
+                                       FontWeight="SemiBold"
+                                       Text="最近两周活跃排行" />
+                            <lvc:CartesianChart Margin="0,18,0,0"
+                                                Series="{Binding RecentGamesSeries}"
+                                                XAxes="{Binding RecentGamesXAxes}"
+                                                YAxes="{Binding RecentGamesYAxes}" />
+                        </DockPanel>
+                    </Border>
+
+                    <Border Width="580"
+                            Height="286"
+                            Margin="0,0,16,16"
+                            Style="{StaticResource CardStyle}">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Top"
+                                       FontSize="18"
+                                       FontWeight="SemiBold"
+                                       Text="近 12 个月最后游玩趋势" />
+                            <lvc:CartesianChart Margin="0,18,0,0"
+                                                Series="{Binding ActivityTrendSeries}"
+                                                XAxes="{Binding ActivityTrendXAxes}"
+                                                YAxes="{Binding ActivityTrendYAxes}" />
+                        </DockPanel>
+                    </Border>
+                </WrapPanel>
+
+                    <Border MinWidth="720"
+                            Height="300"
+                            Margin="0,0,16,16"
+                            Style="{StaticResource CardStyle}">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Top"
+                                       FontSize="18"
+                                       FontWeight="SemiBold"
+                                       Text="累计游玩时长占比" />
+                            <lvc:CartesianChart Margin="0,18,0,0"
+                                                Series="{Binding ParetoSeries}"
+                                                XAxes="{Binding ParetoXAxes}"
+                                                YAxes="{Binding ParetoYAxes}" />
+                        </DockPanel>
+                    </Border>
+            </StackPanel>
+
+            <Border Grid.Row="2"
                     Style="{StaticResource CardStyle}">
                     <DockPanel>
                         <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,14">

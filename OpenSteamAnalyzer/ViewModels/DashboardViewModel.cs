@@ -1,5 +1,7 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Net.Http;
+using System.Text.Json;
 using System.Windows.Data;
 using LiveChartsCore;
 using LiveChartsCore.SkiaSharpView;
@@ -19,21 +21,32 @@ public sealed class DashboardViewModel : BindableBase
     private readonly ISteamCacheRepository _cacheRepository;
     private readonly IAnalyzerService _analyzerService;
     private readonly IAppSettingsRepository _settingsRepository;
-    private readonly SteamApiOptions _steamApiOptions;
     private readonly AppSettings _settings;
 
     private string _accountInput = string.Empty;
     private string _searchText = string.Empty;
     private string _selectedFilterOption = "全部游戏";
     private string _selectedSortOption = "游玩时长";
+    private AccountHistoryItem? _selectedHistoryAccount;
     private string _statusText = "等待输入";
+    private string _friendStatusText = "分析账号后显示好友";
     private bool _isBusy;
+    private bool _isLoadingFriends;
     private SteamProfile? _profile;
     private LibraryAnalysis _analysis = new();
     private ISeries[] _topGamesSeries = Array.Empty<ISeries>();
     private Axis[] _topGamesXAxes = { new() };
     private Axis[] _topGamesYAxes = { new() };
     private ISeries[] _distributionSeries = Array.Empty<ISeries>();
+    private ISeries[] _recentGamesSeries = Array.Empty<ISeries>();
+    private Axis[] _recentGamesXAxes = { new() };
+    private Axis[] _recentGamesYAxes = { new() };
+    private ISeries[] _activityTrendSeries = Array.Empty<ISeries>();
+    private Axis[] _activityTrendXAxes = { new() };
+    private Axis[] _activityTrendYAxes = { new() };
+    private ISeries[] _paretoSeries = Array.Empty<ISeries>();
+    private Axis[] _paretoXAxes = { new() };
+    private Axis[] _paretoYAxes = { new() };
 
     public DashboardViewModel(
         ISteamIdResolverService steamIdResolver,
@@ -41,7 +54,6 @@ public sealed class DashboardViewModel : BindableBase
         ISteamCacheRepository cacheRepository,
         IAnalyzerService analyzerService,
         IAppSettingsRepository settingsRepository,
-        SteamApiOptions steamApiOptions,
         AppSettings settings)
     {
         _steamIdResolver = steamIdResolver;
@@ -49,9 +61,9 @@ public sealed class DashboardViewModel : BindableBase
         _cacheRepository = cacheRepository;
         _analyzerService = analyzerService;
         _settingsRepository = settingsRepository;
-        _steamApiOptions = steamApiOptions;
         _settings = settings;
         _accountInput = settings.SteamInput;
+        RefreshAccountHistory();
 
         if (!string.IsNullOrWhiteSpace(settingsRepository.LastLoadError))
         {
@@ -68,8 +80,6 @@ public sealed class DashboardViewModel : BindableBase
         AnalyzeCommand = new AsyncDelegateCommand(() => LoadAsync(forceRefresh: false), CanAnalyze);
         RefreshCommand = new AsyncDelegateCommand(() => LoadAsync(forceRefresh: true), CanAnalyze);
 
-        HasSavedApiKey = !string.IsNullOrWhiteSpace(settings.SteamApiKey)
-            || !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("STEAM_API_KEY"));
     }
 
     public AsyncDelegateCommand AnalyzeCommand { get; }
@@ -78,13 +88,17 @@ public sealed class DashboardViewModel : BindableBase
 
     public ObservableCollection<SteamGame> Games { get; } = new();
 
+    public ObservableCollection<SteamFriend> Friends { get; } = new();
+
+    public ObservableCollection<TrendInsight> TrendInsights { get; } = new();
+
+    public ObservableCollection<AccountHistoryItem> AccountHistory { get; } = new();
+
     public ICollectionView GamesView { get; }
 
     public IReadOnlyList<string> FilterOptions { get; } = new[] { "全部游戏", "已玩", "未玩" };
 
     public IReadOnlyList<string> SortOptions { get; } = new[] { "游玩时长", "名称", "最近游玩" };
-
-    public bool HasSavedApiKey { get; private set; }
 
     public string AccountInput
     {
@@ -95,6 +109,20 @@ public sealed class DashboardViewModel : BindableBase
             {
                 AnalyzeCommand.RaiseCanExecuteChanged();
                 RefreshCommand.RaiseCanExecuteChanged();
+            }
+        }
+    }
+
+    public AccountHistoryItem? SelectedHistoryAccount
+    {
+        get => _selectedHistoryAccount;
+        set
+        {
+            if (SetProperty(ref _selectedHistoryAccount, value)
+                && value is not null
+                && !string.Equals(AccountInput, value.DisplayText, StringComparison.Ordinal))
+            {
+                AccountInput = value.DisplayText;
             }
         }
     }
@@ -154,6 +182,18 @@ public sealed class DashboardViewModel : BindableBase
         }
     }
 
+    public bool IsLoadingFriends
+    {
+        get => _isLoadingFriends;
+        private set => SetProperty(ref _isLoadingFriends, value);
+    }
+
+    public string FriendStatusText
+    {
+        get => _friendStatusText;
+        private set => SetProperty(ref _friendStatusText, value);
+    }
+
     public SteamProfile? Profile
     {
         get => _profile;
@@ -194,48 +234,63 @@ public sealed class DashboardViewModel : BindableBase
         private set => SetProperty(ref _distributionSeries, value);
     }
 
+    public ISeries[] RecentGamesSeries
+    {
+        get => _recentGamesSeries;
+        private set => SetProperty(ref _recentGamesSeries, value);
+    }
+
+    public Axis[] RecentGamesXAxes
+    {
+        get => _recentGamesXAxes;
+        private set => SetProperty(ref _recentGamesXAxes, value);
+    }
+
+    public Axis[] RecentGamesYAxes
+    {
+        get => _recentGamesYAxes;
+        private set => SetProperty(ref _recentGamesYAxes, value);
+    }
+
+    public ISeries[] ActivityTrendSeries
+    {
+        get => _activityTrendSeries;
+        private set => SetProperty(ref _activityTrendSeries, value);
+    }
+
+    public Axis[] ActivityTrendXAxes
+    {
+        get => _activityTrendXAxes;
+        private set => SetProperty(ref _activityTrendXAxes, value);
+    }
+
+    public Axis[] ActivityTrendYAxes
+    {
+        get => _activityTrendYAxes;
+        private set => SetProperty(ref _activityTrendYAxes, value);
+    }
+
+    public ISeries[] ParetoSeries
+    {
+        get => _paretoSeries;
+        private set => SetProperty(ref _paretoSeries, value);
+    }
+
+    public Axis[] ParetoXAxes
+    {
+        get => _paretoXAxes;
+        private set => SetProperty(ref _paretoXAxes, value);
+    }
+
+    public Axis[] ParetoYAxes
+    {
+        get => _paretoYAxes;
+        private set => SetProperty(ref _paretoYAxes, value);
+    }
+
     private bool CanAnalyze()
     {
         return !IsBusy && !string.IsNullOrWhiteSpace(AccountInput);
-    }
-
-    public bool SaveApiKey(string apiKey)
-    {
-        apiKey = apiKey.Trim();
-        if (string.IsNullOrWhiteSpace(apiKey))
-        {
-            StatusText = "请输入 Steam API Key 后再保存。";
-            return false;
-        }
-
-        try
-        {
-            var updatedSettings = new AppSettings
-            {
-                SteamInput = AccountInput.Trim(),
-                SteamApiKey = apiKey
-            };
-            _settingsRepository.Save(updatedSettings);
-            _settings.SteamInput = updatedSettings.SteamInput;
-            _settings.SteamApiKey = updatedSettings.SteamApiKey;
-        }
-        catch (Exception ex)
-        {
-            StatusText = $"保存 Steam API Key 失败：{ex.Message}";
-            return false;
-        }
-
-        var environmentApiKey = Environment.GetEnvironmentVariable("STEAM_API_KEY");
-        _steamApiOptions.ApiKey = string.IsNullOrWhiteSpace(environmentApiKey)
-            ? apiKey
-            : environmentApiKey;
-
-        StatusText = string.IsNullOrWhiteSpace(environmentApiKey)
-            ? "Steam API Key 已保存"
-            : "已保存本地 Key；当前仍优先使用环境变量 STEAM_API_KEY";
-        HasSavedApiKey = !string.IsNullOrWhiteSpace(apiKey) || !string.IsNullOrWhiteSpace(environmentApiKey);
-        RaisePropertyChanged(nameof(HasSavedApiKey));
-        return true;
     }
 
     private async Task LoadAsync(bool forceRefresh)
@@ -255,6 +310,7 @@ public sealed class DashboardViewModel : BindableBase
                 if (cachedLibrary is not null && DateTimeOffset.UtcNow - cachedLibrary.CachedAt <= CacheLifetime)
                 {
                     ApplyLibrary(cachedLibrary.Profile, cachedLibrary.Games);
+                    await LoadFriendsAsync(steamId64, cancellationToken);
                     StatusText = TrySaveSteamInput()
                         ? $"已使用缓存：{cachedLibrary.CachedAt.ToLocalTime():yyyy-MM-dd HH:mm}{BuildDecorationStatus(cachedLibrary.Profile)}"
                         : $"已使用缓存，但保存 SteamID 失败：{cachedLibrary.CachedAt.ToLocalTime():yyyy-MM-dd HH:mm}";
@@ -282,6 +338,7 @@ public sealed class DashboardViewModel : BindableBase
 
             await _cacheRepository.SaveLibraryAsync(profile, mergedGames, cancellationToken);
             ApplyLibrary(profile, mergedGames);
+            await LoadFriendsAsync(steamId64, cancellationToken);
             StatusText = TrySaveSteamInput()
                 ? $"分析完成：{DateTimeOffset.Now:HH:mm}{BuildDecorationStatus(profile)}"
                 : $"分析完成，但保存 SteamID 失败：{DateTimeOffset.Now:HH:mm}";
@@ -300,10 +357,23 @@ public sealed class DashboardViewModel : BindableBase
         }
     }
 
+    public async Task AnalyzeFriendAsync(SteamFriend friend)
+    {
+        if (IsBusy || string.IsNullOrWhiteSpace(friend.SteamId64))
+        {
+            return;
+        }
+
+        AccountInput = friend.SteamId64;
+        await LoadAsync(forceRefresh: false);
+    }
+
     private void ApplyLibrary(SteamProfile profile, IReadOnlyList<SteamGame> games)
     {
         Profile = profile;
         _analysis = _analyzerService.Analyze(games);
+        Friends.Clear();
+        FriendStatusText = "正在加载好友";
 
         Games.Clear();
         foreach (var game in games)
@@ -314,6 +384,34 @@ public sealed class DashboardViewModel : BindableBase
         ApplySort();
         UpdateCharts();
         RaiseAnalysisPropertiesChanged();
+    }
+
+    private async Task LoadFriendsAsync(string steamId64, CancellationToken cancellationToken)
+    {
+        IsLoadingFriends = true;
+        Friends.Clear();
+        FriendStatusText = "正在加载好友";
+
+        try
+        {
+            var friends = await _steamApiService.GetFriendsAsync(steamId64, cancellationToken);
+            foreach (var friend in friends)
+            {
+                Friends.Add(friend);
+            }
+
+            FriendStatusText = Friends.Count == 0
+                ? "暂无公开好友"
+                : $"共 {Friends.Count} 位好友";
+        }
+        catch (Exception ex) when (ex is SteamApiException or HttpRequestException or InvalidOperationException or JsonException)
+        {
+            FriendStatusText = $"无法读取好友列表：{ex.Message}";
+        }
+        finally
+        {
+            IsLoadingFriends = false;
+        }
     }
 
     private bool FilterGame(object item)
@@ -394,6 +492,116 @@ public sealed class DashboardViewModel : BindableBase
             })
             .Cast<ISeries>()
             .ToArray();
+
+        RecentGamesSeries = new ISeries[]
+        {
+            new ColumnSeries<double>
+            {
+                Name = "h",
+                Values = _analysis.RecentTopGames.Select(game => game.RecentPlaytimeHours).ToArray()
+            }
+        };
+
+        RecentGamesXAxes = new[]
+        {
+            new Axis
+            {
+                Labels = _analysis.RecentTopGames.Select(game => Shorten(game.Name)).ToArray(),
+                LabelsRotation = -25,
+                TextSize = 11
+            }
+        };
+
+        RecentGamesYAxes = new[]
+        {
+            new Axis
+            {
+                Name = "h",
+                MinLimit = 0
+            }
+        };
+
+        ActivityTrendSeries = new ISeries[]
+        {
+            new ColumnSeries<double>
+            {
+                Name = "Games",
+                Values = _analysis.ActivityTrend.Select(point => (double)point.GameCount).ToArray()
+            },
+            new LineSeries<double>
+            {
+                Name = "Hours",
+                Values = _analysis.ActivityTrend.Select(point => point.TotalHours).ToArray()
+            }
+        };
+
+        ActivityTrendXAxes = new[]
+        {
+            new Axis
+            {
+                Labels = _analysis.ActivityTrend.Select(point => point.Label).ToArray(),
+                LabelsRotation = -25,
+                TextSize = 11
+            }
+        };
+
+        ActivityTrendYAxes = new[]
+        {
+            new Axis
+            {
+                MinLimit = 0
+            }
+        };
+
+        var playedGames = Games
+            .Where(game => game.PlaytimeMinutes > 0)
+            .OrderByDescending(game => game.PlaytimeMinutes)
+            .Take(12)
+            .ToList();
+        var totalPlayedMinutes = Games.Sum(game => game.PlaytimeMinutes);
+        var runningTotal = 0;
+        var cumulativeValues = playedGames
+            .Select(game =>
+            {
+                runningTotal += game.PlaytimeMinutes;
+                return totalPlayedMinutes == 0 ? 0 : Math.Round(runningTotal * 100d / totalPlayedMinutes, 1);
+            })
+            .ToArray();
+
+        ParetoSeries = new ISeries[]
+        {
+            new LineSeries<double>
+            {
+                Name = "%",
+                Values = cumulativeValues
+            }
+        };
+
+        ParetoXAxes = new[]
+        {
+            new Axis
+            {
+                Labels = playedGames.Select(game => Shorten(game.Name)).ToArray(),
+                LabelsRotation = -25,
+                TextSize = 11
+            }
+        };
+
+        ParetoYAxes = new[]
+        {
+            new Axis
+            {
+                Name = "%",
+                MinLimit = 0,
+                MaxLimit = 100
+            }
+        };
+
+        TrendInsights.Clear();
+        foreach (var insight in _analysis.TrendInsights)
+        {
+            TrendInsights.Add(insight);
+        }
     }
 
     private void RaiseAnalysisPropertiesChanged()
@@ -415,6 +623,7 @@ public sealed class DashboardViewModel : BindableBase
         try
         {
             _settings.SteamInput = AccountInput.Trim();
+            AddAccountHistory(_settings.SteamInput);
             _settingsRepository.Save(_settings);
             return true;
         }
@@ -422,6 +631,41 @@ public sealed class DashboardViewModel : BindableBase
         {
             return false;
         }
+    }
+
+    public void RefreshAccountHistory()
+    {
+        AccountHistory.Clear();
+        foreach (var account in _settings.SteamInputHistory
+                     .Select(input => input.Trim())
+                     .Where(input => !string.IsNullOrWhiteSpace(input))
+                     .GroupBy(AccountHistoryItem.BuildDisplayText, StringComparer.OrdinalIgnoreCase)
+                     .Select(group => group.First()))
+        {
+            AccountHistory.Add(new AccountHistoryItem(account));
+        }
+    }
+
+    private void AddAccountHistory(string account)
+    {
+        account = account.Trim();
+        if (string.IsNullOrWhiteSpace(account))
+        {
+            return;
+        }
+
+        _settings.SteamInputHistory = new[] { account }
+            .Concat(_settings.SteamInputHistory)
+            .Select(input => input.Trim())
+            .Where(input => !string.IsNullOrWhiteSpace(input))
+            .GroupBy(AccountHistoryItem.BuildDisplayText, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .Take(20)
+            .ToList();
+
+        RefreshAccountHistory();
+        SelectedHistoryAccount = AccountHistory.FirstOrDefault(item =>
+            string.Equals(item.Value, account, StringComparison.OrdinalIgnoreCase));
     }
 
     private static string BuildDecorationStatus(SteamProfile profile)

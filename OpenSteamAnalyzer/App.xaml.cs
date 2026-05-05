@@ -2,6 +2,7 @@ using System.Net.Http;
 using System.Windows;
 using OpenSteamAnalyzer.Repositories;
 using OpenSteamAnalyzer.Services;
+using OpenSteamAnalyzer.ViewModels;
 using Prism.DryIoc;
 using Prism.Ioc;
 
@@ -28,5 +29,11 @@ public partial class App : PrismApplication
         containerRegistry.RegisterSingleton<IAnalyzerService, AnalyzerService>();
         containerRegistry.RegisterSingleton<ISteamApiService, SteamApiService>();
         containerRegistry.RegisterSingleton<ISteamIdResolverService, SteamIdResolverService>();
+        containerRegistry.RegisterSingleton<IStoreDealsService, SteamStoreDealsService>();
+        containerRegistry.RegisterSingleton<IImageCacheService, ImageCacheService>();
+        containerRegistry.RegisterSingleton<DashboardViewModel>();
+        containerRegistry.RegisterSingleton<DiscountsViewModel>();
+        containerRegistry.RegisterSingleton<SettingsViewModel>();
+        containerRegistry.RegisterSingleton<MainWindowViewModel>();
     }
 }

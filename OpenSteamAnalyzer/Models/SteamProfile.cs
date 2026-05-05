@@ -20,6 +20,10 @@ public sealed class SteamProfile
 
     public string ProfileBackgroundVideoUrl { get; init; } = string.Empty;
 
+    public string MiniProfileBackgroundUrl { get; init; } = string.Empty;
+
+    public string MiniProfileBackgroundVideoUrl { get; init; } = string.Empty;
+
     public string ProfileUrl { get; init; } = string.Empty;
 
     public string CountryCode { get; init; } = string.Empty;
@@ -28,7 +32,11 @@ public sealed class SteamProfile
 
     public int? Level { get; init; }
 
-    public string LevelText => Level is null ? "等级未知" : $"等级 {Level}";
+    public string LevelText => SteamLevelStyle.GetLevelText(Level);
+
+    public string LevelColor => SteamLevelStyle.GetLevelColor(Level);
+
+    public string LevelBadgeBackground => SteamLevelStyle.GetLevelBadgeBackground(Level);
 
     public string DisplayAvatarUrl => string.IsNullOrWhiteSpace(AnimatedAvatarUrl)
         ? AvatarUrl
@@ -41,4 +49,7 @@ public sealed class SteamProfile
 
     public bool HasProfileBackground => !string.IsNullOrWhiteSpace(ProfileBackgroundVideoUrl)
         || !string.IsNullOrWhiteSpace(ProfileBackgroundUrl);
+
+    public bool HasMiniProfileBackground => !string.IsNullOrWhiteSpace(MiniProfileBackgroundVideoUrl)
+        || !string.IsNullOrWhiteSpace(MiniProfileBackgroundUrl);
 }

@@ -40,7 +40,14 @@ public sealed class SteamIdResolverService : ISteamIdResolverService
             return await ResolveVanityUrlAsync(vanityMatch.Groups["name"].Value, cancellationToken);
         }
 
-        throw new InvalidOperationException("请输入 SteamID64，或 steamcommunity.com/profiles / steamcommunity.com/id 主页链接。");
+        if (!value.Contains('/', StringComparison.Ordinal)
+            && !value.Contains('\\', StringComparison.Ordinal)
+            && !value.Contains(' ', StringComparison.Ordinal))
+        {
+            return await ResolveVanityUrlAsync(value, cancellationToken);
+        }
+
+        throw new InvalidOperationException("请输入 SteamID64、Steam 个人链接，或 steamcommunity.com/id/ 后面的账号 ID。");
     }
 
     private async Task<string> ResolveVanityUrlAsync(string vanityName, CancellationToken cancellationToken)

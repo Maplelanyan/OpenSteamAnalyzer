@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using OpenSteamAnalyzer.Models;
+using OpenSteamAnalyzer.ViewModels;
 
 namespace OpenSteamAnalyzer.Repositories;
 
@@ -41,6 +42,7 @@ public sealed class AppSettingsRepository : IAppSettingsRepository
                 Save(new AppSettings
                 {
                     SteamInput = storedSettings.SteamInput,
+                    SteamInputHistory = BuildHistory(storedSettings),
                     SteamApiKey = apiKey
                 });
             }
@@ -48,6 +50,7 @@ public sealed class AppSettingsRepository : IAppSettingsRepository
             return new AppSettings
             {
                 SteamInput = storedSettings.SteamInput,
+                SteamInputHistory = BuildHistory(storedSettings),
                 SteamApiKey = apiKey
             };
         }
@@ -65,6 +68,7 @@ public sealed class AppSettingsRepository : IAppSettingsRepository
         var storedSettings = new AppSettings
         {
             SteamInput = settings.SteamInput,
+            SteamInputHistory = BuildHistory(settings),
             EncryptedSteamApiKey = EncryptApiKey(settings.SteamApiKey)
         };
         var json = JsonSerializer.Serialize(storedSettings, new JsonSerializerOptions
@@ -73,6 +77,18 @@ public sealed class AppSettingsRepository : IAppSettingsRepository
         });
 
         File.WriteAllText(_settingsPath, json);
+    }
+
+    private static List<string> BuildHistory(AppSettings settings)
+    {
+        return new[] { settings.SteamInput }
+            .Concat(settings.SteamInputHistory ?? Enumerable.Empty<string>())
+            .Select(input => input.Trim())
+            .Where(input => !string.IsNullOrWhiteSpace(input))
+            .GroupBy(AccountHistoryItem.BuildDisplayText, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .Take(20)
+            .ToList();
     }
 
     private static string EncryptApiKey(string apiKey)

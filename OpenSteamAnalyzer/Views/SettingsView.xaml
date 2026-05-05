@@ -1,0 +1,92 @@
+<UserControl x:Class="OpenSteamAnalyzer.Views.SettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                  VerticalScrollBarVisibility="Auto">
+        <Grid Margin="28">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <Border Grid.Row="0"
+                    Margin="0,0,0,22"
+                    Style="{StaticResource CardStyle}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <TextBlock FontSize="28"
+                                   FontWeight="Bold"
+                                   Text="设置" />
+                        <TextBlock Margin="0,8,0,0"
+                                   Foreground="{StaticResource MutedInkBrush}"
+                                   Text="管理默认 Steam 输入、Steam API Key 和本地保存状态" />
+                    </StackPanel>
+                    <TextBlock Grid.Column="1"
+                               VerticalAlignment="Center"
+                               Foreground="{StaticResource MutedInkBrush}"
+                               Text="{Binding StatusText}" />
+                </Grid>
+            </Border>
+
+            <Border Grid.Row="1"
+                    MaxWidth="760"
+                    HorizontalAlignment="Left"
+                    Style="{StaticResource CardStyle}">
+                <StackPanel>
+                    <TextBlock FontSize="18"
+                               FontWeight="SemiBold"
+                               Text="Steam 账户" />
+                    <TextBlock Margin="0,8,0,0"
+                               Foreground="{StaticResource MutedInkBrush}"
+                               Text="用于打开应用后预填分析页输入框。" />
+                    <TextBox Margin="0,16,0,0"
+                             Text="{Binding SteamInput, UpdateSourceTrigger=PropertyChanged}" />
+
+                    <TextBlock Margin="0,26,0,0"
+                               FontSize="18"
+                               FontWeight="SemiBold"
+                               Text="Steam API Key" />
+                    <TextBlock Margin="0,8,0,0"
+                               Foreground="{StaticResource MutedInkBrush}"
+                               Text="{Binding ApiKeyStateText}" />
+                    <PasswordBox x:Name="ApiKeyPasswordBox"
+                                 Margin="0,16,0,0" />
+                    <TextBlock Margin="0,8,0,0"
+                               Foreground="{StaticResource MutedInkBrush}"
+                               Text="留空保存时会保留当前已保存的 Key。" />
+
+                    <Button Width="132"
+                            Margin="0,24,0,0"
+                            HorizontalAlignment="Left"
+                            Click="SaveButton_OnClick"
+                            Content="保存设置" />
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Row="2"
+                    MaxWidth="760"
+                    Margin="0,22,0,0"
+                    HorizontalAlignment="Left"
+                    Style="{StaticResource CardStyle}">
+                <StackPanel>
+                    <TextBlock FontSize="18"
+                               FontWeight="SemiBold"
+                               Text="存储说明" />
+                    <TextBlock Margin="0,12,0,0"
+                               Foreground="{StaticResource MutedInkBrush}"
+                               Text="Steam API Key 会通过 Windows 当前用户的数据保护机制加密后保存到本地。"
+                               TextWrapping="Wrap" />
+                    <TextBlock Margin="0,8,0,0"
+                               Foreground="{StaticResource MutedInkBrush}"
+                               Text="如果系统环境变量 STEAM_API_KEY 存在，应用请求 Steam API 时会优先使用环境变量。"
+                               TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+        </Grid>
+    </ScrollViewer>
+</UserControl>

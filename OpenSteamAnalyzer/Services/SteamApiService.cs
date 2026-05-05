@@ -45,6 +45,8 @@ public sealed class SteamApiService : ISteamApiService
             AnimatedAvatarVideoUrl = profileItems.AnimatedAvatarVideoUrl,
             ProfileBackgroundUrl = profileItems.ProfileBackgroundUrl,
             ProfileBackgroundVideoUrl = profileItems.ProfileBackgroundVideoUrl,
+            MiniProfileBackgroundUrl = profileItems.MiniProfileBackgroundUrl,
+            MiniProfileBackgroundVideoUrl = profileItems.MiniProfileBackgroundVideoUrl,
             ProfileUrl = GetString(player, "profileurl"),
             CountryCode = GetString(player, "loccountrycode"),
             StateText = MapPersonaState(GetInt32(player, "personastate")),
@@ -111,6 +113,103 @@ public sealed class SteamApiService : ISteamApiService
                 group => group.Max(game => GetInt32(game, "playtime_2weeks")));
     }
 
+    public async Task<IReadOnlyList<SteamFriend>> GetFriendsAsync(string steamId64, CancellationToken cancellationToken)
+    {
+        _options.EnsureApiKey();
+
+        var friendListUrl = $"https://api.steampowered.com/ISteamUser/GetFriendList/v1/?key={Uri.EscapeDataString(_options.ApiKey)}&steamid={steamId64}&relationship=friend";
+        using var friendListDocument = await GetJsonAsync(friendListUrl, "获取好友列表", cancellationToken);
+
+        if (!friendListDocument.RootElement.TryGetProperty("friendslist", out var friendsList)
+            || !friendsList.TryGetProperty("friends", out var friendsElement))
+        {
+            return Array.Empty<SteamFriend>();
+        }
+
+        var friendSinceBySteamId = friendsElement
+            .EnumerateArray()
+            .Select(friend => new
+            {
+                SteamId = GetString(friend, "steamid"),
+                FriendSince = TryGetUnixTime(friend, "friend_since")
+            })
+            .Where(friend => !string.IsNullOrWhiteSpace(friend.SteamId))
+            .GroupBy(friend => friend.SteamId)
+            .ToDictionary(group => group.Key, group => group.First().FriendSince);
+
+        if (friendSinceBySteamId.Count == 0)
+        {
+            return Array.Empty<SteamFriend>();
+        }
+
+        var friends = new List<SteamFriend>();
+        foreach (var chunk in friendSinceBySteamId.Keys.Chunk(100))
+        {
+            var summariesUrl = $"https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/?key={Uri.EscapeDataString(_options.ApiKey)}&steamids={Uri.EscapeDataString(string.Join(',', chunk))}";
+            using var summariesDocument = await GetJsonAsync(summariesUrl, "获取好友信息", cancellationToken);
+            if (!summariesDocument.RootElement.TryGetProperty("response", out var response)
+                || !response.TryGetProperty("players", out var players))
+            {
+                continue;
+            }
+
+            foreach (var player in players.EnumerateArray())
+            {
+                var friendSteamId = GetString(player, "steamid");
+                friends.Add(new SteamFriend
+                {
+                    SteamId64 = friendSteamId,
+                    DisplayName = GetString(player, "personaname"),
+                    AvatarUrl = GetString(player, "avatarfull"),
+                    ProfileUrl = GetString(player, "profileurl"),
+                    StateText = MapPersonaState(GetInt32(player, "personastate")),
+                    FriendSince = friendSinceBySteamId.TryGetValue(friendSteamId, out var friendSince)
+                        ? friendSince
+                        : null
+                });
+            }
+        }
+
+        friends = await LoadFriendLevelsAsync(friends, cancellationToken);
+
+        return friends
+            .OrderByDescending(friend => friend.Level ?? -1)
+            .ThenBy(friend => friend.DisplayName)
+            .ThenBy(friend => friend.SteamId64)
+            .ToList();
+    }
+
+    private async Task<List<SteamFriend>> LoadFriendLevelsAsync(
+        IReadOnlyList<SteamFriend> friends,
+        CancellationToken cancellationToken)
+    {
+        using var throttler = new SemaphoreSlim(8);
+        var tasks = friends.Select(async friend =>
+        {
+            await throttler.WaitAsync(cancellationToken);
+            try
+            {
+                var level = await TryGetPlayerLevelAsync(friend.SteamId64, cancellationToken);
+                return new SteamFriend
+                {
+                    SteamId64 = friend.SteamId64,
+                    DisplayName = friend.DisplayName,
+                    AvatarUrl = friend.AvatarUrl,
+                    ProfileUrl = friend.ProfileUrl,
+                    StateText = friend.StateText,
+                    Level = level,
+                    FriendSince = friend.FriendSince
+                };
+            }
+            finally
+            {
+                throttler.Release();
+            }
+        });
+
+        return (await Task.WhenAll(tasks)).ToList();
+    }
+
     private async Task<int?> TryGetPlayerLevelAsync(string steamId64, CancellationToken cancellationToken)
     {
         var url = $"https://api.steampowered.com/IPlayerService/GetSteamLevel/v1/?key={Uri.EscapeDataString(_options.ApiKey)}&steamid={steamId64}";
@@ -156,6 +255,23 @@ public sealed class SteamApiService : ISteamApiService
             var avatarFrame = TryGetProfileItem(responseRoot, "avatar_frame");
             var animatedAvatar = TryGetProfileItem(responseRoot, "animated_avatar");
             var profileBackground = TryGetProfileItem(responseRoot, "profile_background", "background");
+            var miniProfileBackground = TryGetProfileItem(
+                responseRoot,
+                "mini_profile_background",
+                "miniprofile_background",
+                "profile_modifier",
+                "mini_profile");
+
+            if (string.IsNullOrWhiteSpace(miniProfileBackground.VideoUrl)
+                && string.IsNullOrWhiteSpace(miniProfileBackground.ImageUrl))
+            {
+                miniProfileBackground = TryFindProfileItemByNameHints(
+                    responseRoot,
+                    "mini_profile_background",
+                    "miniprofile_background",
+                    "mini profile",
+                    "profile_modifier");
+            }
 
             if (string.IsNullOrWhiteSpace(avatarFrame.VideoUrl))
             {
@@ -186,7 +302,9 @@ public sealed class SteamApiService : ISteamApiService
                 AnimatedAvatarUrl = animatedAvatar.ImageUrl,
                 AnimatedAvatarVideoUrl = animatedAvatar.VideoUrl,
                 ProfileBackgroundUrl = profileBackground.ImageUrl,
-                ProfileBackgroundVideoUrl = profileBackground.VideoUrl
+                ProfileBackgroundVideoUrl = profileBackground.VideoUrl,
+                MiniProfileBackgroundUrl = miniProfileBackground.ImageUrl,
+                MiniProfileBackgroundVideoUrl = miniProfileBackground.VideoUrl
             };
         }
         catch (JsonException)
@@ -375,6 +493,43 @@ public sealed class SteamApiService : ISteamApiService
         };
     }
 
+    private static ProfileItem TryFindProfileItemByNameHints(JsonElement root, params string[] hints)
+    {
+        if (root.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var property in root.EnumerateObject())
+            {
+                if (hints.Any(hint => property.Name.Contains(hint, StringComparison.OrdinalIgnoreCase)))
+                {
+                    var item = TryGetProfileItem(property.Value);
+                    if (!string.IsNullOrWhiteSpace(item.VideoUrl) || !string.IsNullOrWhiteSpace(item.ImageUrl))
+                    {
+                        return item;
+                    }
+                }
+
+                var nested = TryFindProfileItemByNameHints(property.Value, hints);
+                if (!string.IsNullOrWhiteSpace(nested.VideoUrl) || !string.IsNullOrWhiteSpace(nested.ImageUrl))
+                {
+                    return nested;
+                }
+            }
+        }
+        else if (root.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in root.EnumerateArray())
+            {
+                var nested = TryFindProfileItemByNameHints(item, hints);
+                if (!string.IsNullOrWhiteSpace(nested.VideoUrl) || !string.IsNullOrWhiteSpace(nested.ImageUrl))
+                {
+                    return nested;
+                }
+            }
+        }
+
+        return new ProfileItem();
+    }
+
     private static string? GetFirstNonEmptyString(JsonElement element, params string[] propertyNames)
     {
         foreach (var propertyName in propertyNames)
@@ -471,5 +626,9 @@ public sealed class SteamApiService : ISteamApiService
         public string ProfileBackgroundUrl { get; init; } = string.Empty;
 
         public string ProfileBackgroundVideoUrl { get; init; } = string.Empty;
+
+        public string MiniProfileBackgroundUrl { get; init; } = string.Empty;
+
+        public string MiniProfileBackgroundVideoUrl { get; init; } = string.Empty;
     }
 }

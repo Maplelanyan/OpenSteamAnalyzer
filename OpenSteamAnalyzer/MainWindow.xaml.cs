@@ -5,7 +5,7 @@ namespace OpenSteamAnalyzer;
 
 public partial class MainWindow : Window
 {
-    public MainWindow(DashboardViewModel viewModel)
+    public MainWindow(MainWindowViewModel viewModel)
     {
         InitializeComponent();
         DataContext = viewModel;

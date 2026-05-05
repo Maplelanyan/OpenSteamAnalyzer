@@ -19,6 +19,8 @@ public partial class DashboardView : UserControl
     private static readonly HttpClient BackgroundHttpClient = new();
     private MediaPlayer? _backgroundMediaPlayer;
     private int _backgroundRequestVersion;
+    private int _miniProfileRequestVersion;
+    private bool _hasAnimatedAvatarContent;
 
     public DashboardView()
     {
@@ -27,23 +29,33 @@ public partial class DashboardView : UserControl
         Unloaded += DashboardView_OnUnloaded;
     }
 
-    private void SaveApiKeyButton_OnClick(object sender, RoutedEventArgs e)
-    {
-        if (DataContext is not DashboardViewModel viewModel)
-        {
-            return;
-        }
-
-        if (viewModel.SaveApiKey(ApiKeyPasswordBox.Password))
-        {
-            ApiKeyPasswordBox.Clear();
-        }
-    }
-
     private void GamesDataGrid_OnPreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {
         PageScrollViewer.ScrollToVerticalOffset(PageScrollViewer.VerticalOffset - e.Delta);
         e.Handled = true;
+    }
+
+    private void PageScrollViewer_OnScrollChanged(object sender, ScrollChangedEventArgs e)
+    {
+        if (!_hasAnimatedAvatarContent)
+        {
+            return;
+        }
+
+        AnimatedAvatarWebView.Visibility = PageScrollViewer.VerticalOffset <= 12
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+    }
+
+    private async void AnalyzeFriendButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not DashboardViewModel viewModel
+            || sender is not FrameworkElement { DataContext: SteamFriend friend })
+        {
+            return;
+        }
+
+        await viewModel.AnalyzeFriendAsync(friend);
     }
 
     private void DashboardView_OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
@@ -58,6 +70,7 @@ public partial class DashboardView : UserControl
             newViewModel.PropertyChanged += DashboardViewModel_OnPropertyChanged;
             UpdateAnimatedAvatar(newViewModel.Profile);
             UpdateProfileBackground(newViewModel.Profile);
+            UpdateMiniProfilePreview(newViewModel.Profile);
         }
     }
 
@@ -68,6 +81,7 @@ public partial class DashboardView : UserControl
             viewModel.PropertyChanged -= DashboardViewModel_OnPropertyChanged;
         }
 
+        StopMiniProfilePreview();
         StopProfileBackgroundVideo();
     }
 
@@ -78,13 +92,56 @@ public partial class DashboardView : UserControl
         {
             UpdateAnimatedAvatar(viewModel.Profile);
             UpdateProfileBackground(viewModel.Profile);
+            UpdateMiniProfilePreview(viewModel.Profile);
         }
+    }
+
+    private void MiniProfilePreviewMedia_OnMediaEnded(object sender, RoutedEventArgs e)
+    {
+        MiniProfilePreviewMedia.Position = TimeSpan.Zero;
+        MiniProfilePreviewMedia.Play();
+    }
+
+    private async void UpdateMiniProfilePreview(SteamProfile? profile)
+    {
+        var requestVersion = ++_miniProfileRequestVersion;
+        StopMiniProfilePreview();
+
+        if (profile is null || string.IsNullOrWhiteSpace(profile.MiniProfileBackgroundVideoUrl))
+        {
+            return;
+        }
+
+        try
+        {
+            var cachedVideoPath = await CacheMediaVideoAsync(profile.MiniProfileBackgroundVideoUrl);
+            if (requestVersion != _miniProfileRequestVersion)
+            {
+                return;
+            }
+
+            MiniProfilePreviewMedia.Source = new Uri(cachedVideoPath, UriKind.Absolute);
+            MiniProfilePreviewMedia.Visibility = Visibility.Visible;
+            MiniProfilePreviewMedia.Play();
+        }
+        catch
+        {
+            StopMiniProfilePreview();
+        }
+    }
+
+    private void StopMiniProfilePreview()
+    {
+        MiniProfilePreviewMedia.Stop();
+        MiniProfilePreviewMedia.Source = null;
+        MiniProfilePreviewMedia.Visibility = Visibility.Collapsed;
     }
 
     private async void UpdateAnimatedAvatar(SteamProfile? profile)
     {
         if (profile is null || !profile.HasAnimatedAvatarLayer)
         {
+            _hasAnimatedAvatarContent = false;
             AnimatedAvatarWebView.Visibility = Visibility.Collapsed;
             return;
         }
@@ -92,6 +149,7 @@ public partial class DashboardView : UserControl
         try
         {
             AnimatedAvatarWebView.Visibility = Visibility.Visible;
+            _hasAnimatedAvatarContent = true;
             AnimatedAvatarWebView.DefaultBackgroundColor = System.Drawing.Color.Transparent;
             await AnimatedAvatarWebView.EnsureCoreWebView2Async();
             AnimatedAvatarWebView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
@@ -100,6 +158,7 @@ public partial class DashboardView : UserControl
         }
         catch
         {
+            _hasAnimatedAvatarContent = false;
             AnimatedAvatarWebView.Visibility = Visibility.Collapsed;
         }
     }
@@ -196,7 +255,7 @@ public partial class DashboardView : UserControl
 
             if (!string.IsNullOrWhiteSpace(profile.ProfileBackgroundVideoUrl))
             {
-                var cachedVideoPath = await CacheBackgroundVideoAsync(profile.ProfileBackgroundVideoUrl);
+                var cachedVideoPath = await CacheMediaVideoAsync(profile.ProfileBackgroundVideoUrl);
                 if (requestVersion != _backgroundRequestVersion)
                 {
                     return;
@@ -274,7 +333,7 @@ public partial class DashboardView : UserControl
     }
 
 
-    private static async Task<string> CacheBackgroundVideoAsync(string videoUrl)
+    private static async Task<string> CacheMediaVideoAsync(string videoUrl)
     {
         var appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         var cacheDirectory = Path.Combine(appData, "OpenSteamAnalyzer", "media-cache");
@@ -293,7 +352,11 @@ public partial class DashboardView : UserControl
             return filePath;
         }
 
-        await using var remoteStream = await BackgroundHttpClient.GetStreamAsync(videoUrl);
+        using var request = new HttpRequestMessage(HttpMethod.Get, videoUrl);
+        request.Headers.UserAgent.ParseAdd("OpenSteamAnalyzer/1.0");
+        using var response = await BackgroundHttpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+        response.EnsureSuccessStatusCode();
+        await using var remoteStream = await response.Content.ReadAsStreamAsync();
         await using var fileStream = File.Create(filePath);
         await remoteStream.CopyToAsync(fileStream);
         return filePath;
