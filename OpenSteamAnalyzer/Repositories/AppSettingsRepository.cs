@@ -81,11 +81,11 @@ public sealed class AppSettingsRepository : IAppSettingsRepository
 
     private static List<string> BuildHistory(AppSettings settings)
     {
-        return new[] { settings.SteamInput }
-            .Concat(settings.SteamInputHistory ?? Enumerable.Empty<string>())
+        return (settings.SteamInputHistory ?? Enumerable.Empty<string>())
+            .Concat(new[] { settings.SteamInput })
             .Select(input => input.Trim())
             .Where(input => !string.IsNullOrWhiteSpace(input))
-            .GroupBy(AccountHistoryItem.BuildDisplayText, StringComparer.OrdinalIgnoreCase)
+            .GroupBy(AccountHistoryItem.BuildKey, StringComparer.OrdinalIgnoreCase)
             .Select(group => group.First())
             .Take(20)
             .ToList();

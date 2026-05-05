@@ -2,10 +2,13 @@ namespace OpenSteamAnalyzer.ViewModels;
 
 public sealed class AccountHistoryItem
 {
+    private const char Separator = '\t';
+
     public AccountHistoryItem(string value)
     {
-        Value = value;
-        DisplayText = BuildDisplayText(value);
+        var parsed = Parse(value);
+        Value = parsed.Value;
+        DisplayText = parsed.DisplayText;
     }
 
     public string Value { get; }
@@ -18,6 +21,39 @@ public sealed class AccountHistoryItem
     }
 
     public static string BuildDisplayText(string value)
+    {
+        return Parse(value).DisplayText;
+    }
+
+    public static string BuildKey(string value)
+    {
+        return Parse(value).Value;
+    }
+
+    public static string BuildStoredValue(string value, string displayName)
+    {
+        value = value.Trim();
+        displayName = displayName.Trim();
+        return string.IsNullOrWhiteSpace(displayName)
+            ? value
+            : $"{value}{Separator}{displayName}";
+    }
+
+    private static (string Value, string DisplayText) Parse(string value)
+    {
+        value = value.Trim();
+        var separatorIndex = value.IndexOf(Separator);
+        if (separatorIndex > 0)
+        {
+            var storedValue = value[..separatorIndex].Trim();
+            var displayText = value[(separatorIndex + 1)..].Trim();
+            return (storedValue, string.IsNullOrWhiteSpace(displayText) ? BuildLegacyDisplayText(storedValue) : displayText);
+        }
+
+        return (value, BuildLegacyDisplayText(value));
+    }
+
+    private static string BuildLegacyDisplayText(string value)
     {
         value = value.Trim();
         if (string.IsNullOrWhiteSpace(value))

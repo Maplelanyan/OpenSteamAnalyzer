@@ -42,9 +42,13 @@ public partial class DashboardView : UserControl
             return;
         }
 
-        AnimatedAvatarWebView.Visibility = PageScrollViewer.VerticalOffset <= 12
+        var targetVisibility = PageScrollViewer.VerticalOffset <= 12
             ? Visibility.Visible
             : Visibility.Collapsed;
+        if (AnimatedAvatarWebView.Visibility != targetVisibility)
+        {
+            AnimatedAvatarWebView.Visibility = targetVisibility;
+        }
     }
 
     private async void AnalyzeFriendButton_OnClick(object sender, RoutedEventArgs e)

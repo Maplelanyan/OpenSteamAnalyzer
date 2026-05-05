@@ -259,9 +259,31 @@
                                        Text="{Binding FriendStatusText}" />
                         </Grid>
 
+                        <StackPanel DockPanel.Dock="Bottom"
+                                    Margin="0,10,0,0"
+                                    HorizontalAlignment="Right"
+                                    Orientation="Horizontal">
+                            <Button Width="72"
+                                    Height="32"
+                                    Padding="0"
+                                    Command="{Binding PreviousFriendsPageCommand}"
+                                    Content="上一页" />
+                            <TextBlock MinWidth="56"
+                                       Margin="10,0"
+                                       VerticalAlignment="Center"
+                                       FontWeight="SemiBold"
+                                       Text="{Binding FriendsPageInfo}"
+                                       TextAlignment="Center" />
+                            <Button Width="72"
+                                    Height="32"
+                                    Padding="0"
+                                    Command="{Binding NextFriendsPageCommand}"
+                                    Content="下一页" />
+                        </StackPanel>
+
                         <ListBox Margin="0,14,0,0"
                                  BorderThickness="0"
-                                 ItemsSource="{Binding Friends}"
+                                 ItemsSource="{Binding PagedFriends}"
                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                             <ListBox.ItemContainerStyle>
                                 <Style TargetType="{x:Type ListBoxItem}">
@@ -470,7 +492,7 @@
 
             <Border Grid.Row="2"
                     Style="{StaticResource CardStyle}">
-                    <DockPanel>
+                    <DockPanel LastChildFill="False">
                         <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,14">
                             <TextBox Width="520"
                                      Margin="0,0,12,12"
@@ -485,7 +507,9 @@
                                       SelectedItem="{Binding SelectedSortOption}" />
                         </WrapPanel>
 
-                        <DataGrid ItemsSource="{Binding GamesView}"
+                        <DataGrid DockPanel.Dock="Top"
+                                  ItemsSource="{Binding PagedGames}"
+                                  Height="622"
                                   PreviewMouseWheel="GamesDataGrid_OnPreviewMouseWheel"
                                   ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                   ScrollViewer.VerticalScrollBarVisibility="Disabled">
@@ -513,6 +537,24 @@
                                 <DataGridTextColumn Binding="{Binding LastPlayedText}" Header="最后游玩" Width="160" />
                             </DataGrid.Columns>
                         </DataGrid>
+
+                        <StackPanel DockPanel.Dock="Bottom"
+                                    Margin="0,14,0,0"
+                                    HorizontalAlignment="Right"
+                                    Orientation="Horizontal">
+                            <Button Width="86"
+                                    Command="{Binding PreviousGamesPageCommand}"
+                                    Content="上一页" />
+                            <TextBlock MinWidth="72"
+                                       Margin="12,0"
+                                       VerticalAlignment="Center"
+                                       FontWeight="SemiBold"
+                                       Text="{Binding GamesPageInfo}"
+                                       TextAlignment="Center" />
+                            <Button Width="86"
+                                    Command="{Binding NextGamesPageCommand}"
+                                    Content="下一页" />
+                        </StackPanel>
                     </DockPanel>
             </Border>
         </Grid>

@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using OpenSteamAnalyzer.Models;
 using OpenSteamAnalyzer.ViewModels;
 
@@ -20,6 +21,12 @@ public partial class DiscountsView : UserControl
         {
             viewModel.RefreshCommand.Execute(null);
         }
+    }
+
+    private void DiscountsDataGrid_OnPreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        PageScrollViewer.ScrollToVerticalOffset(PageScrollViewer.VerticalOffset - e.Delta);
+        e.Handled = true;
     }
 
     private void OpenStoreButton_OnClick(object sender, RoutedEventArgs e)

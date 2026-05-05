@@ -8,6 +8,8 @@ namespace OpenSteamAnalyzer.Services;
 
 public sealed class SteamStoreDealsService : IStoreDealsService
 {
+    private const decimal FallbackUsdToCnyRate = 7.25m;
+
     private static readonly Regex ResultRowRegex = new(
         @"<a\s+[^>]*class=""[^""]*search_result_row[^""]*""[^>]*>.*?</a>",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.Singleline);
@@ -61,7 +63,35 @@ public sealed class SteamStoreDealsService : IStoreDealsService
 
     private async Task<IReadOnlyList<StoreDiscountGame>> GetSteamStoreDiscountsAsync(int count, CancellationToken cancellationToken)
     {
-        var url = $"https://store.steampowered.com/search/results/?query&start=0&count={Math.Clamp(count, 10, 100)}&dynamic_data=&sort_by=_ASC&specials=1&infinite=1&cc=us&l=schinese";
+        var targetCount = Math.Clamp(count, 20, 500);
+        var games = new List<StoreDiscountGame>();
+        const int pageSize = 100;
+        for (var start = 0; games.Count < targetCount; start += pageSize)
+        {
+            var pageGames = await GetSteamStoreDiscountPageAsync(start, Math.Min(pageSize, targetCount - games.Count), cancellationToken);
+            if (pageGames.Count == 0)
+            {
+                break;
+            }
+
+            games.AddRange(pageGames);
+        }
+
+        return games
+            .GroupBy(game => game.AppId?.ToString() ?? game.StoreUrl, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .OrderByDescending(game => game.DiscountPercent)
+            .ThenBy(game => game.Name)
+            .Take(targetCount)
+            .ToList();
+    }
+
+    private async Task<IReadOnlyList<StoreDiscountGame>> GetSteamStoreDiscountPageAsync(
+        int start,
+        int count,
+        CancellationToken cancellationToken)
+    {
+        var url = $"https://store.steampowered.com/search/results/?query&start={start}&count={count}&dynamic_data=&sort_by=_ASC&specials=1&infinite=1&cc=cn&l=schinese";
         using var request = new HttpRequestMessage(HttpMethod.Get, url);
         request.Headers.UserAgent.ParseAdd("OpenSteamAnalyzer/1.0");
 
@@ -91,7 +121,38 @@ public sealed class SteamStoreDealsService : IStoreDealsService
 
     private async Task<IReadOnlyList<StoreDiscountGame>> GetCheapSharkSteamDiscountsAsync(int count, CancellationToken cancellationToken)
     {
-        var url = $"https://www.cheapshark.com/api/1.0/deals?storeID=1&pageSize={Math.Clamp(count, 10, 100)}&sortBy=Savings";
+        var targetCount = Math.Clamp(count, 20, 500);
+        var games = new List<StoreDiscountGame>();
+        const int pageSize = 100;
+        for (var pageNumber = 0; games.Count < targetCount; pageNumber++)
+        {
+            var pageGames = await GetCheapSharkSteamDiscountPageAsync(
+                pageNumber,
+                Math.Min(pageSize, targetCount - games.Count),
+                cancellationToken);
+            if (pageGames.Count == 0)
+            {
+                break;
+            }
+
+            games.AddRange(pageGames);
+        }
+
+        return games
+            .GroupBy(game => game.AppId?.ToString() ?? game.StoreUrl, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .OrderByDescending(game => game.DiscountPercent)
+            .ThenBy(game => game.Name)
+            .Take(targetCount)
+            .ToList();
+    }
+
+    private async Task<IReadOnlyList<StoreDiscountGame>> GetCheapSharkSteamDiscountPageAsync(
+        int pageNumber,
+        int count,
+        CancellationToken cancellationToken)
+    {
+        var url = $"https://www.cheapshark.com/api/1.0/deals?storeID=1&pageSize={count}&pageNumber={pageNumber}&sortBy=Savings";
         using var request = new HttpRequestMessage(HttpMethod.Get, url);
         request.Headers.UserAgent.ParseAdd("OpenSteamAnalyzer/1.0");
 
@@ -167,8 +228,8 @@ public sealed class SteamStoreDealsService : IStoreDealsService
                 ? $"https://store.steampowered.com/app/{parsedAppId}/"
                 : string.Empty,
             DiscountPercent = discountPercent,
-            OriginalPrice = FormatUsd(normalPrice),
-            FinalPrice = FormatUsd(salePrice)
+            OriginalPrice = FormatUsdAsCny(normalPrice),
+            FinalPrice = FormatUsdAsCny(salePrice)
         };
     }
 
@@ -191,10 +252,10 @@ public sealed class SteamStoreDealsService : IStoreDealsService
             : string.Empty;
     }
 
-    private static string FormatUsd(string value)
+    private static string FormatUsdAsCny(string value)
     {
         return decimal.TryParse(value, out var price)
-            ? price.ToString("C", System.Globalization.CultureInfo.GetCultureInfo("en-US"))
+            ? $"约 ¥{price * FallbackUsdToCnyRate:0.00}"
             : value;
     }
 }

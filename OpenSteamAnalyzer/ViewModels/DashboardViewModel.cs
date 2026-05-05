@@ -15,6 +15,8 @@ namespace OpenSteamAnalyzer.ViewModels;
 public sealed class DashboardViewModel : BindableBase
 {
     private static readonly TimeSpan CacheLifetime = TimeSpan.FromHours(6);
+    private const int GamesPageSize = 10;
+    private const int FriendsPageSize = 4;
 
     private readonly ISteamIdResolverService _steamIdResolver;
     private readonly ISteamApiService _steamApiService;
@@ -47,6 +49,10 @@ public sealed class DashboardViewModel : BindableBase
     private ISeries[] _paretoSeries = Array.Empty<ISeries>();
     private Axis[] _paretoXAxes = { new() };
     private Axis[] _paretoYAxes = { new() };
+    private int _currentGamePage;
+    private int _totalGamePages;
+    private int _currentFriendPage;
+    private int _totalFriendPages;
 
     public DashboardViewModel(
         ISteamIdResolverService steamIdResolver,
@@ -79,6 +85,10 @@ public sealed class DashboardViewModel : BindableBase
 
         AnalyzeCommand = new AsyncDelegateCommand(() => LoadAsync(forceRefresh: false), CanAnalyze);
         RefreshCommand = new AsyncDelegateCommand(() => LoadAsync(forceRefresh: true), CanAnalyze);
+        PreviousGamesPageCommand = new DelegateCommand(PreviousGamesPage, CanGoToPreviousGamesPage);
+        NextGamesPageCommand = new DelegateCommand(NextGamesPage, CanGoToNextGamesPage);
+        PreviousFriendsPageCommand = new DelegateCommand(PreviousFriendsPage, CanGoToPreviousFriendsPage);
+        NextFriendsPageCommand = new DelegateCommand(NextFriendsPage, CanGoToNextFriendsPage);
 
     }
 
@@ -88,7 +98,19 @@ public sealed class DashboardViewModel : BindableBase
 
     public ObservableCollection<SteamGame> Games { get; } = new();
 
+    public ObservableCollection<SteamGame> PagedGames { get; } = new();
+
+    public DelegateCommand PreviousGamesPageCommand { get; }
+
+    public DelegateCommand NextGamesPageCommand { get; }
+
     public ObservableCollection<SteamFriend> Friends { get; } = new();
+
+    public ObservableCollection<SteamFriend> PagedFriends { get; } = new();
+
+    public DelegateCommand PreviousFriendsPageCommand { get; }
+
+    public DelegateCommand NextFriendsPageCommand { get; }
 
     public ObservableCollection<TrendInsight> TrendInsights { get; } = new();
 
@@ -120,9 +142,9 @@ public sealed class DashboardViewModel : BindableBase
         {
             if (SetProperty(ref _selectedHistoryAccount, value)
                 && value is not null
-                && !string.Equals(AccountInput, value.DisplayText, StringComparison.Ordinal))
+                && !string.Equals(AccountInput, value.Value, StringComparison.Ordinal))
             {
-                AccountInput = value.DisplayText;
+                AccountInput = value.Value;
             }
         }
     }
@@ -135,6 +157,7 @@ public sealed class DashboardViewModel : BindableBase
             if (SetProperty(ref _searchText, value))
             {
                 GamesView.Refresh();
+                RefreshPagedGames(resetPage: true);
             }
         }
     }
@@ -147,6 +170,7 @@ public sealed class DashboardViewModel : BindableBase
             if (SetProperty(ref _selectedFilterOption, value))
             {
                 GamesView.Refresh();
+                RefreshPagedGames(resetPage: true);
             }
         }
     }
@@ -168,6 +192,66 @@ public sealed class DashboardViewModel : BindableBase
         get => _statusText;
         private set => SetProperty(ref _statusText, value);
     }
+
+    public int CurrentGamePage
+    {
+        get => _currentGamePage;
+        private set
+        {
+            if (SetProperty(ref _currentGamePage, value))
+            {
+                RaisePropertyChanged(nameof(GamesPageInfo));
+                RaiseGamesPageCommandStateChanged();
+            }
+        }
+    }
+
+    public int TotalGamePages
+    {
+        get => _totalGamePages;
+        private set
+        {
+            if (SetProperty(ref _totalGamePages, value))
+            {
+                RaisePropertyChanged(nameof(GamesPageInfo));
+                RaiseGamesPageCommandStateChanged();
+            }
+        }
+    }
+
+    public string GamesPageInfo => TotalGamePages == 0
+        ? "0 / 0"
+        : $"{CurrentGamePage} / {TotalGamePages}";
+
+    public int CurrentFriendPage
+    {
+        get => _currentFriendPage;
+        private set
+        {
+            if (SetProperty(ref _currentFriendPage, value))
+            {
+                RaisePropertyChanged(nameof(FriendsPageInfo));
+                RaiseFriendsPageCommandStateChanged();
+            }
+        }
+    }
+
+    public int TotalFriendPages
+    {
+        get => _totalFriendPages;
+        private set
+        {
+            if (SetProperty(ref _totalFriendPages, value))
+            {
+                RaisePropertyChanged(nameof(FriendsPageInfo));
+                RaiseFriendsPageCommandStateChanged();
+            }
+        }
+    }
+
+    public string FriendsPageInfo => TotalFriendPages == 0
+        ? "0 / 0"
+        : $"{CurrentFriendPage} / {TotalFriendPages}";
 
     public bool IsBusy
     {
@@ -311,7 +395,7 @@ public sealed class DashboardViewModel : BindableBase
                 {
                     ApplyLibrary(cachedLibrary.Profile, cachedLibrary.Games);
                     await LoadFriendsAsync(steamId64, cancellationToken);
-                    StatusText = TrySaveSteamInput()
+                    StatusText = TrySaveSteamInput(cachedLibrary.Profile)
                         ? $"已使用缓存：{cachedLibrary.CachedAt.ToLocalTime():yyyy-MM-dd HH:mm}{BuildDecorationStatus(cachedLibrary.Profile)}"
                         : $"已使用缓存，但保存 SteamID 失败：{cachedLibrary.CachedAt.ToLocalTime():yyyy-MM-dd HH:mm}";
                     return;
@@ -339,7 +423,7 @@ public sealed class DashboardViewModel : BindableBase
             await _cacheRepository.SaveLibraryAsync(profile, mergedGames, cancellationToken);
             ApplyLibrary(profile, mergedGames);
             await LoadFriendsAsync(steamId64, cancellationToken);
-            StatusText = TrySaveSteamInput()
+            StatusText = TrySaveSteamInput(profile)
                 ? $"分析完成：{DateTimeOffset.Now:HH:mm}{BuildDecorationStatus(profile)}"
                 : $"分析完成，但保存 SteamID 失败：{DateTimeOffset.Now:HH:mm}";
         }
@@ -373,6 +457,7 @@ public sealed class DashboardViewModel : BindableBase
         Profile = profile;
         _analysis = _analyzerService.Analyze(games);
         Friends.Clear();
+        RefreshPagedFriends(resetPage: true);
         FriendStatusText = "正在加载好友";
 
         Games.Clear();
@@ -390,6 +475,7 @@ public sealed class DashboardViewModel : BindableBase
     {
         IsLoadingFriends = true;
         Friends.Clear();
+        RefreshPagedFriends(resetPage: true);
         FriendStatusText = "正在加载好友";
 
         try
@@ -399,6 +485,8 @@ public sealed class DashboardViewModel : BindableBase
             {
                 Friends.Add(friend);
             }
+
+            RefreshPagedFriends(resetPage: true);
 
             FriendStatusText = Friends.Count == 0
                 ? "暂无公开好友"
@@ -451,6 +539,183 @@ public sealed class DashboardViewModel : BindableBase
         }
 
         GamesView.Refresh();
+        RefreshPagedGames(resetPage: true);
+    }
+
+    private void RefreshPagedGames(bool resetPage)
+    {
+        var filteredGames = GetFilteredSortedGames();
+
+        TotalGamePages = filteredGames.Count == 0
+            ? 0
+            : (int)Math.Ceiling(filteredGames.Count / (double)GamesPageSize);
+
+        if (resetPage)
+        {
+            CurrentGamePage = TotalGamePages == 0 ? 0 : 1;
+        }
+        else if (CurrentGamePage > TotalGamePages)
+        {
+            CurrentGamePage = TotalGamePages;
+        }
+        else if (CurrentGamePage == 0 && TotalGamePages > 0)
+        {
+            CurrentGamePage = 1;
+        }
+
+        PagedGames.Clear();
+        if (CurrentGamePage == 0)
+        {
+            RaiseGamesPageCommandStateChanged();
+            return;
+        }
+
+        foreach (var game in filteredGames
+                     .Skip((CurrentGamePage - 1) * GamesPageSize)
+                     .Take(GamesPageSize))
+        {
+            PagedGames.Add(game);
+        }
+
+        RaiseGamesPageCommandStateChanged();
+    }
+
+    private List<SteamGame> GetFilteredSortedGames()
+    {
+        var filteredGames = Games
+            .Where(FilterGame)
+            .ToList();
+
+        if (string.Equals(SelectedSortOption, SortOptions[1], StringComparison.Ordinal))
+        {
+            return filteredGames
+                .OrderBy(game => game.Name)
+                .ToList();
+        }
+
+        if (string.Equals(SelectedSortOption, SortOptions[2], StringComparison.Ordinal))
+        {
+            return filteredGames
+                .OrderByDescending(game => game.RecentPlaytimeMinutes)
+                .ThenByDescending(game => game.PlaytimeMinutes)
+                .ToList();
+        }
+
+        return filteredGames
+            .OrderByDescending(game => game.PlaytimeMinutes)
+            .ToList();
+    }
+
+    private void PreviousGamesPage()
+    {
+        if (!CanGoToPreviousGamesPage())
+        {
+            return;
+        }
+
+        CurrentGamePage--;
+        RefreshPagedGames(resetPage: false);
+    }
+
+    private void NextGamesPage()
+    {
+        if (!CanGoToNextGamesPage())
+        {
+            return;
+        }
+
+        CurrentGamePage++;
+        RefreshPagedGames(resetPage: false);
+    }
+
+    private bool CanGoToPreviousGamesPage()
+    {
+        return CurrentGamePage > 1;
+    }
+
+    private bool CanGoToNextGamesPage()
+    {
+        return CurrentGamePage > 0 && CurrentGamePage < TotalGamePages;
+    }
+
+    private void RaiseGamesPageCommandStateChanged()
+    {
+        PreviousGamesPageCommand.RaiseCanExecuteChanged();
+        NextGamesPageCommand.RaiseCanExecuteChanged();
+    }
+
+    private void RefreshPagedFriends(bool resetPage)
+    {
+        TotalFriendPages = Friends.Count == 0
+            ? 0
+            : (int)Math.Ceiling(Friends.Count / (double)FriendsPageSize);
+
+        if (resetPage)
+        {
+            CurrentFriendPage = TotalFriendPages == 0 ? 0 : 1;
+        }
+        else if (CurrentFriendPage > TotalFriendPages)
+        {
+            CurrentFriendPage = TotalFriendPages;
+        }
+        else if (CurrentFriendPage == 0 && TotalFriendPages > 0)
+        {
+            CurrentFriendPage = 1;
+        }
+
+        PagedFriends.Clear();
+        if (CurrentFriendPage == 0)
+        {
+            RaiseFriendsPageCommandStateChanged();
+            return;
+        }
+
+        foreach (var friend in Friends
+                     .Skip((CurrentFriendPage - 1) * FriendsPageSize)
+                     .Take(FriendsPageSize))
+        {
+            PagedFriends.Add(friend);
+        }
+
+        RaiseFriendsPageCommandStateChanged();
+    }
+
+    private void PreviousFriendsPage()
+    {
+        if (!CanGoToPreviousFriendsPage())
+        {
+            return;
+        }
+
+        CurrentFriendPage--;
+        RefreshPagedFriends(resetPage: false);
+    }
+
+    private void NextFriendsPage()
+    {
+        if (!CanGoToNextFriendsPage())
+        {
+            return;
+        }
+
+        CurrentFriendPage++;
+        RefreshPagedFriends(resetPage: false);
+    }
+
+    private bool CanGoToPreviousFriendsPage()
+    {
+        return CurrentFriendPage > 1;
+    }
+
+    private bool CanGoToNextFriendsPage()
+    {
+        return CurrentFriendPage > 0 && CurrentFriendPage < TotalFriendPages;
+    }
+
+    private void RaiseFriendsPageCommandStateChanged()
+    {
+        PreviousFriendsPageCommand.RaiseCanExecuteChanged();
+        NextFriendsPageCommand.RaiseCanExecuteChanged();
     }
 
     private void UpdateCharts()
@@ -618,12 +883,14 @@ public sealed class DashboardViewModel : BindableBase
         return value.Length <= 16 ? value : value[..15] + "...";
     }
 
-    private bool TrySaveSteamInput()
+    private bool TrySaveSteamInput(SteamProfile profile)
     {
         try
         {
-            _settings.SteamInput = AccountInput.Trim();
-            AddAccountHistory(_settings.SteamInput);
+            _settings.SteamInput = string.IsNullOrWhiteSpace(profile.SteamId64)
+                ? AccountInput.Trim()
+                : profile.SteamId64;
+            AddAccountHistory(_settings.SteamInput, profile.DisplayName);
             _settingsRepository.Save(_settings);
             return true;
         }
@@ -639,14 +906,14 @@ public sealed class DashboardViewModel : BindableBase
         foreach (var account in _settings.SteamInputHistory
                      .Select(input => input.Trim())
                      .Where(input => !string.IsNullOrWhiteSpace(input))
-                     .GroupBy(AccountHistoryItem.BuildDisplayText, StringComparer.OrdinalIgnoreCase)
+                     .GroupBy(AccountHistoryItem.BuildKey, StringComparer.OrdinalIgnoreCase)
                      .Select(group => group.First()))
         {
             AccountHistory.Add(new AccountHistoryItem(account));
         }
     }
 
-    private void AddAccountHistory(string account)
+    private void AddAccountHistory(string account, string displayName)
     {
         account = account.Trim();
         if (string.IsNullOrWhiteSpace(account))
@@ -654,11 +921,12 @@ public sealed class DashboardViewModel : BindableBase
             return;
         }
 
-        _settings.SteamInputHistory = new[] { account }
+        var storedAccount = AccountHistoryItem.BuildStoredValue(account, displayName);
+        _settings.SteamInputHistory = new[] { storedAccount }
             .Concat(_settings.SteamInputHistory)
             .Select(input => input.Trim())
             .Where(input => !string.IsNullOrWhiteSpace(input))
-            .GroupBy(AccountHistoryItem.BuildDisplayText, StringComparer.OrdinalIgnoreCase)
+            .GroupBy(AccountHistoryItem.BuildKey, StringComparer.OrdinalIgnoreCase)
             .Select(group => group.First())
             .Take(20)
             .ToList();
